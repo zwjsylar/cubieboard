@@ -1,0 +1,16 @@
+#http::: this is the clone url
+git remote add upstream http://github.com/zwjsylar/cubieboard.git
+
+git add filename
+
+git commit -m "anything that about this push"
+
+git push upstream
+
+#sth other
+
+git log
+
+git status
+
+git pull
