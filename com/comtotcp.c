@@ -339,9 +339,9 @@ int main(int argc, char **argv)
    //char test[15] = "hello world";
     while(1)
     {
-        printf("waitint for data\n");
+        printf("waiting for data\n");
         ret = epoll_wait(epfd, &events, 1, 10000);
-        printf("wait for data success\n");
+        printf("wait data success\n");
         if(ret < 0)
         {
             perror("epoll_wait");
@@ -351,7 +351,7 @@ int main(int argc, char **argv)
         {
             ev.data.fd = ComFd;
             ev.events = EPOLLOUT | EPOLLET;
-            epoll_ctl(epfd, EPOLL_CTL_MOD, temp_fd, &ev);
+            epoll_ctl(epfd, EPOLL_CTL_MOD, ComFd, &ev);
             continue;
         }
 
