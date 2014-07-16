@@ -283,7 +283,7 @@ int rev_data(int epfd, int fd, char *buf, int length)
 
 int main(int argc, char **argv)
 {
-    int fd;
+    int ComFd;
     int epfd;
     struct epoll_event events, ev;
     int nread;
@@ -301,8 +301,8 @@ int main(int argc, char **argv)
     }
 
 //    fd = init_serial(argv[3]);
-    fd  = ComInit(argv[3], 9600);
-    addFdToEpfd(epfd, fd);
+    ComFd  = ComInit(argv[3], 9600);
+    addFdToEpfd(epfd, ComFd);
     printf("\nWelcome to uart_test\n\n");
 
     memset(rev_buffer,0,sizeof(rev_buffer));
@@ -340,12 +340,19 @@ int main(int argc, char **argv)
     while(1)
     {
         printf("waitint for data\n");
-        ret = epoll_wait(epfd, &events, 1, -1);
+        ret = epoll_wait(epfd, &events, 1, 10000);
         printf("wait for data success\n");
-        if(ret <= 0)
+        if(ret < 0)
         {
             perror("epoll_wait");
-            return -1;
+            break;
+        }
+        else if(ret == 0)
+        {
+            ev.data.fd = ComFd;
+            ev.events = EPOLLOUT | EPOLLET;
+            epoll_ctl(epfd, EPOLL_CTL_MOD, temp_fd, &ev);
+            continue;
         }
 
         for( i = 0; i < ret; i++)
@@ -384,6 +391,8 @@ int main(int argc, char **argv)
         }
         sleep(1);
     }
+    close(epfd);
+    close(ComFd);
     return 0;
 }
 
