@@ -15,25 +15,30 @@
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/rfcomm.h>
 #include <pthread.h>
+#include <signal.h>
 #include "ComInit.h"
 
-void *bt_thread(void *arg);
+int bt_socket;
+void *bt_pthread(void *arg);
+static void sig_usr(int socket);
 
 const char SendData[8] = {0x01, 0x04, 0x13, 0x87, 0x00, 0x45, 0x85, 0x54};
 
 struct BtData
 {
-    char BtDataBuf[20];
+    char BtDataBuf[1024];
     int BtSize;
     pthread_rwlock_t BtLock;
-} bt_data;
+};
+
+struct BtData bt_data;
 
 int BtData_init(struct BtData *BD)
 {
     int err;
-    *BD->BtSize = 0;
-    memset(*BD->BtDataBuf,0,sizeof(*BD->BtDataBuf));
-    err = pthread_rwlock_init(&BD->BtLock, NULL);
+    (*BD).BtSize = 0;
+    memset((*BD).BtDataBuf,0,sizeof((*BD).BtDataBuf));
+    err = pthread_rwlock_init(&(*BD).BtLock, NULL);
     if (err != 0)
         return err;
     return 0;
@@ -56,7 +61,7 @@ int main(int argc, char **argv)
 //creat pthread
     int bt_status;
     pthread_t bt_tid;
-    bt_status = pthread_creat(&bt_tid, NULL, bt_pthread, NULL);
+    bt_status = pthread_create(&bt_tid, NULL, bt_pthread, NULL);
 
 //creat epoll
     epfd = epoll_create(1);
@@ -140,15 +145,15 @@ int main(int argc, char **argv)
             {
                 printf("read data\n");
                 int temp_fd = events.data.fd;
-                pthread_rwlock_wrlock(&bt_data->BtLock);
-                if ((nread = read(temp_fd, bt_data->BtDataBuf, sizeof(bt_data->BtDataBuf)-2)) < 0)
+                pthread_rwlock_wrlock(&bt_data.BtLock);
+                if ((nread = read(temp_fd, bt_data.BtDataBuf, sizeof(bt_data.BtDataBuf)-2)) < 0)
                     perror("com read");
-                bt_data->BtDataBuf[nread] = '\0';
-                bt_data->BtSize = nread;
-                if ((nwrite = write(msg_socket, bt_data->BtDataBuf, nread)) < 0)
+                bt_data.BtDataBuf[nread] = '\0';
+                bt_data.BtSize = nread;
+                if ((nwrite = write(msg_socket, bt_data.BtDataBuf, nread)) < 0)
                     perror("msg_socket write");
-                printf("read data :%s\n", bt_data->BtDataBuf);
-                pthread_rwlock_unlock(&bt_data->BtLock);
+                printf("read data :%s\n", bt_data.BtDataBuf);
+                pthread_rwlock_unlock(&bt_data.BtLock);
                 ev.data.fd = temp_fd;
                 ev.events = EPOLLOUT | EPOLLET;
                 epoll_ctl(epfd, EPOLL_CTL_MOD, temp_fd, &ev);
@@ -164,18 +169,18 @@ int main(int argc, char **argv)
     return 0;
 }
 
-void *bt_thread(void *arg)
+void *bt_pthread(void *arg)
 {
     struct sockaddr_rc loc_addr ={0},rem_addr={0};
     char buf[1024] ={0};//,*addr;
-    int bt_socket, client, bytes_write, result;
+    int client, bytes_write, result;
     int opt = sizeof(rem_addr);
 
 
     printf("Creating socket...\n");
 
     bt_socket = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
-
+    signal(SIGINT, sig_usr);
     if(bt_socket < 0)
     {
         perror("create socket error");
@@ -201,7 +206,7 @@ void *bt_thread(void *arg)
     {
         printf("success!\n");
     }
-
+	
    /*result=ba2str(&loc_addr.rc_bdaddr,addr);
    if(result<0)
      {
@@ -240,18 +245,24 @@ void *bt_thread(void *arg)
 
         while(1)
         {
-            if( pthread_rwlock_rdlock(&bt_data->BtLock) != 0)
+            if( pthread_rwlock_rdlock(&bt_data.BtLock) != 0)
                 continue;
-            bytes_write = write(client, bt_data->BtDataBuf, bt_data->BtSize);
-            if(bytes_write != bt_data->BtSize)
+            bytes_write = write(client, bt_data.BtDataBuf, bt_data.BtSize);
+            if(bytes_write != bt_data.BtSize)
             {
                 printf("bluetooth write error\n");
                 exit(1);
             }
-            pthread_rwlock_unlock(&bt_data->BtLock);
-        }
+            pthread_rwlock_unlock(&bt_data.BtLock);
+	    sleep(5);	
+	 }
         close(client);
     }
     close(bt_socket);
     return ((void *)0);
+}
+
+static void sig_usr(int signo)
+{
+    close(bt_socket);
 }
